@@ -9,7 +9,7 @@ import { COLUMNS, ItemTypes } from './constants';
 
 const initialTasks: Task[] = [
     { id: 'task-1', column: 'backlog', title: 'User Authentication Flow', description: 'Design and implement the complete user login and registration process.', points: 8, attachments: [] },
-    { id: 'task-2', column: 'backlog', title: 'Setup CI/CD Pipeline', description: 'Configure GitHub Actions for automated testing and deployment.', points: 5, attachments: [] },
+    { id: 'task-2', column: 'backlog', title: 'Setup CI/CD Pipeline', description: 'Configure GitHub Actions for automated testing and deployment.', attachments: [] },
     { id: 'task-3', column: 'todo', title: 'Create Database Schema', description: 'Define the initial database schema for users and projects.', points: 5, attachments: [] },
     { id: 'task-4', column: 'in-progress', title: 'Develop Landing Page', description: 'Build the main marketing landing page with React and Tailwind.', points: 3, attachments: [] },
     { id: 'task-6', column: 'blocked', title: 'API Integration', description: 'Waiting for backend team to provide the new endpoint.', points: 5, attachments: [] },
@@ -54,9 +54,11 @@ const TaskCard: React.FC<{ task: Task; onClick: (task: Task) => void }> = ({ tas
         {task.attachments && task.attachments.length > 0 && (
           <span className="text-xs text-medium dark:text-gray-400">📎 {task.attachments.length}</span>
         )}
-        <div className="text-xs font-semibold bg-primary text-white rounded-full px-2 py-1 inline-block ml-auto">
-          {task.points} Points
-        </div>
+        {task.points && task.points > 0 && (
+          <div className="text-xs font-semibold bg-primary text-white rounded-full px-2 py-1 inline-block ml-auto">
+            {task.points} Points
+          </div>
+        )}
       </div>
     </div>
   );
@@ -157,18 +159,18 @@ const RetrospectiveModal: React.FC<{
 
 const NewTaskModal: React.FC<{
     onClose: () => void;
-    onAddTask: (task: { title: string; description: string; points: number }) => void;
+    onAddTask: (task: { title: string; description: string; points?: number }) => void;
 }> = ({ onClose, onAddTask }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [points, setPoints] = useState<number | ''>('');
 
     const handleSubmit = () => {
-        if (!title.trim() || !description.trim() || points === '' || Number(points) <= 0) {
-            alert('Please fill in all fields with valid values. Points must be greater than 0.');
+        if (!title.trim() || !description.trim()) {
+            alert('Please fill in the title and description.');
             return;
         }
-        onAddTask({ title, description, points: Number(points) });
+        onAddTask({ title, description, points: points !== '' ? Number(points) : undefined });
     };
 
     return (
@@ -185,8 +187,8 @@ const NewTaskModal: React.FC<{
                         <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} required rows={4} className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
                     </div>
                      <div>
-                        <label htmlFor="points" className="font-semibold block mb-2">Story Points</label>
-                        <input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value === '' ? '' : parseInt(e.target.value, 10))} required min="1" className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                        <label htmlFor="points" className="font-semibold block mb-2">Story Points (Optional)</label>
+                        <input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value === '' ? '' : parseInt(e.target.value, 10))} min="0" className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
                     </div>
                     <div className="mt-6 flex justify-end space-x-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100">Cancel</button>
@@ -206,21 +208,21 @@ const TaskDetailModal: React.FC<{
 }> = ({ task, onClose, onSave, onDelete }) => {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description);
-    const [points, setPoints] = useState<number | ''>(task.points);
+    const [points, setPoints] = useState<number | ''>(task.points || '');
     const [column, setColumn] = useState<ColumnId>(task.column);
     const [attachments, setAttachments] = useState<Attachment[]>(task.attachments || []);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
     const handleSubmit = () => {
-        if (!title.trim() || points === '' || Number(points) <= 0) {
-            alert('Title and valid points are required.');
+        if (!title.trim()) {
+            alert('Title is required.');
             return;
         }
         onSave({
             ...task,
             title,
             description,
-            points: Number(points),
+            points: points !== '' ? Number(points) : undefined,
             column,
             attachments,
         });
@@ -315,8 +317,8 @@ const TaskDetailModal: React.FC<{
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label htmlFor="edit-points" className="font-semibold block mb-2">Story Points</label>
-                            <input id="edit-points" type="number" value={points} onChange={(e) => setPoints(e.target.value === '' ? '' : parseInt(e.target.value, 10))} required min="1" className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                            <label htmlFor="edit-points" className="font-semibold block mb-2">Story Points (Optional)</label>
+                            <input id="edit-points" type="number" value={points} onChange={(e) => setPoints(e.target.value === '' ? '' : parseInt(e.target.value, 10))} min="0" className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
                         </div>
                         <div>
                              <label htmlFor="edit-status" className="font-semibold block mb-2">Status</label>
@@ -492,7 +494,7 @@ const App: React.FC = () => {
     );
   }, []);
 
-  const handleAddTask = useCallback((taskData: { title: string; description: string; points: number; }) => {
+  const handleAddTask = useCallback((taskData: { title: string; description: string; points?: number; }) => {
     const newTask: Task = {
       id: `task-${Date.now()}`,
       column: 'backlog',
@@ -576,7 +578,7 @@ const App: React.FC = () => {
 
   const burndownData = useMemo(() => {
     const sprintTasks = tasks.filter(t => t.column !== 'backlog');
-    const totalPoints = sprintTasks.reduce((sum, task) => sum + task.points, 0);
+    const totalPoints = sprintTasks.reduce((sum, task) => sum + (task.points || 0), 0);
     const data = [{ day: 0, remaining: totalPoints, ideal: totalPoints }];
     
     const pointsPerDay = totalPoints > 0 && sprintDurationDays > 0 ? totalPoints / sprintDurationDays : 0;
@@ -585,7 +587,7 @@ const App: React.FC = () => {
         const date = new Date(sprint.startDate);
         date.setDate(date.getDate() + i);
         // This is a simulation - in a real app, you'd track completion dates.
-        const completedPoints = tasks.filter(t => t.column === 'done').reduce((sum, task) => sum + task.points, 0);
+        const completedPoints = tasks.filter(t => t.column === 'done').reduce((sum, task) => sum + (task.points || 0), 0);
         data.push({
             day: i,
             remaining: totalPoints - completedPoints,

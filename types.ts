@@ -11,7 +11,7 @@ export interface Task {
   column: ColumnId;
   title: string;
   description: string;
-  points: number;
+  points?: number;
   attachments?: Attachment[];
 }
 
