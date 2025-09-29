@@ -1,0 +1,5 @@
+{
+  "name": "Scrum Sprint Runner",
+  "description": "An AI-powered application for project managers to streamline their Scrum sprints. It features backlog management, a drag-and-drop sprint board, a burndown chart, and Gemini-powered features to generate user stories and summarize retrospectives.",
+  "requestFramePermissions": []
+}
