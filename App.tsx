@@ -127,7 +127,7 @@ const RetrospectiveModal: React.FC<{
             setSummary(summary);
         } catch (error) {
             console.error("Failed to summarize retrospective:", error);
-            alert("Error summarizing retrospective. Check console for details.");
+            alert(`Error summarizing retrospective: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsLoading(false);
             onClose();
@@ -266,7 +266,7 @@ const TaskDetailModal: React.FC<{
             setDescription(prev => `${prev}\n\n--- AI Analysis ---\n${summary}`);
         } catch (error) {
             console.error("Failed to analyze attachments:", error);
-            alert("Error analyzing attachments. Check console for details.");
+            alert(`Error analyzing attachments: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsAnalyzing(false);
         }
@@ -554,7 +554,7 @@ const App: React.FC = () => {
         }))]);
     } catch (error) {
         console.error("Failed to generate user stories:", error);
-        alert("Error generating user stories. Check console for details.");
+        alert(`Error generating user stories: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
         setIsLoading(false);
         setAiFeature(null);

@@ -1,11 +1,19 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { Attachment } from './types';
+import type { Attachment } from '../types';
 
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-    throw new Error("API_KEY environment variable not set");
+let ai: GoogleGenAI | undefined;
+
+function getAiClient(): GoogleGenAI {
+    if (!ai) {
+        const API_KEY = process.env.API_KEY;
+        if (!API_KEY) {
+            throw new Error("API_KEY environment variable not set. Please configure it to use AI features.");
+        }
+        ai = new GoogleGenAI({ apiKey: API_KEY });
+    }
+    return ai;
 }
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+
 
 const userStorySchema = {
     type: Type.OBJECT,
@@ -28,6 +36,7 @@ const userStorySchema = {
 
 export const generateUserStories = async (featureIdea: string) => {
     try {
+        const ai = getAiClient();
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `Based on the high-level feature idea "${featureIdea}", generate a list of 3-5 detailed user stories for a scrum backlog.`,
@@ -56,7 +65,7 @@ export const generateUserStories = async (featureIdea: string) => {
 
     } catch (error) {
         console.error("Error generating user stories:", error);
-        throw new Error("Failed to communicate with the AI model. Please check your API key and network connection.");
+        throw error;
     }
 };
 
@@ -74,6 +83,7 @@ export const summarizeRetrospective = async (wentWell: string[], couldImprove: s
     `;
 
     try {
+        const ai = getAiClient();
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
@@ -81,7 +91,7 @@ export const summarizeRetrospective = async (wentWell: string[], couldImprove: s
         return response.text;
     } catch (error) {
         console.error("Error summarizing retrospective:", error);
-        throw new Error("Failed to communicate with the AI model for summarization.");
+        throw error;
     }
 };
 
@@ -113,6 +123,7 @@ export const analyzeTaskAttachments = async (taskTitle: string, attachments: Att
     const textPart = { text: prompt };
 
     try {
+        const ai = getAiClient();
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: { parts: [textPart, ...fileParts] },
@@ -121,6 +132,6 @@ export const analyzeTaskAttachments = async (taskTitle: string, attachments: Att
         return response.text;
     } catch (error) {
         console.error("Error analyzing attachments:", error);
-        throw new Error("Failed to communicate with the AI model for attachment analysis.");
+        throw error;
     }
 };
