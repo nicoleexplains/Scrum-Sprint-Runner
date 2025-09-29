@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { produce } from 'immer';
@@ -409,6 +409,47 @@ const SprintEditModal: React.FC<{
     );
 };
 
+const GenerateStoriesModal: React.FC<{
+    onClose: () => void;
+    onGenerate: (featureIdea: string) => void;
+}> = ({ onClose, onGenerate }) => {
+    const [featureIdea, setFeatureIdea] = useState('');
+
+    const handleSubmit = () => {
+        if (!featureIdea.trim()) {
+            alert('Please enter a feature idea.');
+            return;
+        }
+        onGenerate(featureIdea);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-lg text-gray-800 dark:text-gray-100">
+                <h2 className="text-2xl font-bold mb-6">✨ Generate User Stories with AI</h2>
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
+                    <div>
+                        <label htmlFor="feature-idea" className="font-semibold block mb-2">High-Level Feature Idea</label>
+                        <input 
+                            id="feature-idea" 
+                            type="text" 
+                            value={featureIdea} 
+                            onChange={(e) => setFeatureIdea(e.target.value)} 
+                            placeholder="e.g., 'A dashboard for project analytics'"
+                            required 
+                            className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                        />
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100">Cancel</button>
+                        <button type="submit" className="px-4 py-2 rounded bg-secondary text-white hover:bg-green-600">Generate Stories</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [sprint, setSprint] = useState<Sprint>(initialSprint);
@@ -419,6 +460,26 @@ const App: React.FC = () => {
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSprintModal, setShowSprintModal] = useState(false);
+  const [showStoriesModal, setShowStoriesModal] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) return savedTheme;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+  };
 
   const moveTask = useCallback((taskId: string, targetColumn: ColumnId) => {
     setTasks(
@@ -475,28 +536,28 @@ const App: React.FC = () => {
         setShowSprintModal(false);
     }, []);
 
-  const handleGenerateStories = async () => {
-        const featureIdea = prompt("Enter a high-level feature idea (e.g., 'User profile page'):");
-        if (!featureIdea) return;
-        
-        setIsLoading(true);
-        setAiFeature('stories');
-        try {
-            const newStories = await generateUserStories(featureIdea);
-            setTasks(prev => [...prev, ...newStories.map((story, index) => ({
-                ...story,
-                id: `task-${Date.now()}-${index}`,
-                column: 'backlog' as ColumnId,
-                attachments: [],
-            }))]);
-        } catch (error) {
-            console.error("Failed to generate user stories:", error);
-            alert("Error generating user stories. Check console for details.");
-        } finally {
-            setIsLoading(false);
-            setAiFeature(null);
-        }
-    };
+  const handleGenerateStories = async (featureIdea: string) => {
+    if (!featureIdea) return;
+    
+    setShowStoriesModal(false);
+    setIsLoading(true);
+    setAiFeature('stories');
+    try {
+        const newStories = await generateUserStories(featureIdea);
+        setTasks(prev => [...prev, ...newStories.map((story, index) => ({
+            ...story,
+            id: `task-${Date.now()}-${index}`,
+            column: 'backlog' as ColumnId,
+            attachments: [],
+        }))]);
+    } catch (error) {
+        console.error("Failed to generate user stories:", error);
+        alert("Error generating user stories. Check console for details.");
+    } finally {
+        setIsLoading(false);
+        setAiFeature(null);
+    }
+};
   
   const tasksByColumn = useMemo(() => {
     return tasks.reduce((acc, task) => {
@@ -539,8 +600,23 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-light dark:bg-dark text-dark dark:text-light font-sans">
         <header className="bg-white dark:bg-gray-900 shadow-md p-4 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-primary">Scrum Sprint Runner</h1>
-          <div className="space-x-2">
-            <button onClick={handleGenerateStories} className="px-4 py-2 bg-secondary text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition-colors">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary bg-gray-200 dark:bg-gray-700"
+              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            >
+              {theme === 'light' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
+            <button onClick={() => setShowStoriesModal(true)} className="px-4 py-2 bg-secondary text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition-colors">
               ✨ AI Generate Stories
             </button>
             <button onClick={() => setShowRetroModal(true)} className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-primary-hover transition-colors">
@@ -648,6 +724,13 @@ const App: React.FC = () => {
                 sprint={sprint}
                 onClose={() => setShowSprintModal(false)}
                 onSave={handleUpdateSprint}
+            />
+        )}
+
+        {showStoriesModal && (
+            <GenerateStoriesModal
+                onClose={() => setShowStoriesModal(false)}
+                onGenerate={handleGenerateStories}
             />
         )}
       </div>
