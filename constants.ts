@@ -9,5 +9,6 @@ export const COLUMNS: { id: ColumnId; title: string }[] = [
   { id: 'backlog', title: 'Product Backlog' },
   { id: 'todo', title: 'To Do' },
   { id: 'in-progress', title: 'In Progress' },
+  { id: 'blocked', title: 'Blocked' },
   { id: 'done', title: 'Done' },
 ];

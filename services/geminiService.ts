@@ -1,5 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
+import type { Attachment } from './types';
 
 const API_KEY = process.env.API_KEY;
 if (!API_KEY) {
@@ -82,5 +82,45 @@ export const summarizeRetrospective = async (wentWell: string[], couldImprove: s
     } catch (error) {
         console.error("Error summarizing retrospective:", error);
         throw new Error("Failed to communicate with the AI model for summarization.");
+    }
+};
+
+export const analyzeTaskAttachments = async (taskTitle: string, attachments: Attachment[]): Promise<string> => {
+    if (attachments.length === 0) {
+        return "No attachments to analyze.";
+    }
+
+    const prompt = `
+        You are an expert project manager. Analyze the attached file(s) for the task titled "${taskTitle}". 
+        Based on the content of the files, provide a concise summary and a suggested project workflow or a list of sub-tasks.
+        Format your response clearly with headings for 'Summary' and 'Workflow/Sub-tasks'.
+    `;
+
+    const fileParts = attachments.map(file => {
+        // The base64 string from FileReader includes a data URI prefix, e.g., "data:image/png;base64,". We need to strip it.
+        const base64Data = file.data.split(',')[1];
+        if (!base64Data) {
+            throw new Error(`Invalid base64 data for file ${file.name}`);
+        }
+        return {
+            inlineData: {
+                data: base64Data,
+                mimeType: file.type,
+            },
+        };
+    });
+
+    const textPart = { text: prompt };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: { parts: [textPart, ...fileParts] },
+        });
+
+        return response.text;
+    } catch (error) {
+        console.error("Error analyzing attachments:", error);
+        throw new Error("Failed to communicate with the AI model for attachment analysis.");
     }
 };

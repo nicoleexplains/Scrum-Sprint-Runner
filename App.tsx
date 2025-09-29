@@ -3,16 +3,17 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { produce } from 'immer';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { generateUserStories, summarizeRetrospective } from './services/geminiService';
-import type { Task, ColumnId, Sprint } from './types';
+import { generateUserStories, summarizeRetrospective, analyzeTaskAttachments } from './services/geminiService';
+import type { Task, ColumnId, Sprint, Attachment } from './types';
 import { COLUMNS, ItemTypes } from './constants';
 
 const initialTasks: Task[] = [
-    { id: 'task-1', column: 'backlog', title: 'User Authentication Flow', description: 'Design and implement the complete user login and registration process.', points: 8 },
-    { id: 'task-2', column: 'backlog', title: 'Setup CI/CD Pipeline', description: 'Configure GitHub Actions for automated testing and deployment.', points: 5 },
-    { id: 'task-3', column: 'todo', title: 'Create Database Schema', description: 'Define the initial database schema for users and projects.', points: 5 },
-    { id: 'task-4', column: 'in-progress', title: 'Develop Landing Page', description: 'Build the main marketing landing page with React and Tailwind.', points: 3 },
-    { id: 'task-5', column: 'done', title: 'Project Scaffolding', description: 'Initialize the React project with TypeScript and basic dependencies.', points: 2 },
+    { id: 'task-1', column: 'backlog', title: 'User Authentication Flow', description: 'Design and implement the complete user login and registration process.', points: 8, attachments: [] },
+    { id: 'task-2', column: 'backlog', title: 'Setup CI/CD Pipeline', description: 'Configure GitHub Actions for automated testing and deployment.', points: 5, attachments: [] },
+    { id: 'task-3', column: 'todo', title: 'Create Database Schema', description: 'Define the initial database schema for users and projects.', points: 5, attachments: [] },
+    { id: 'task-4', column: 'in-progress', title: 'Develop Landing Page', description: 'Build the main marketing landing page with React and Tailwind.', points: 3, attachments: [] },
+    { id: 'task-6', column: 'blocked', title: 'API Integration', description: 'Waiting for backend team to provide the new endpoint.', points: 5, attachments: [] },
+    { id: 'task-5', column: 'done', title: 'Project Scaffolding', description: 'Initialize the React project with TypeScript and basic dependencies.', points: 2, attachments: [] },
 ];
 
 const initialSprint: Sprint = {
@@ -34,7 +35,10 @@ const TaskCard: React.FC<{ task: Task; onClick: (task: Task) => void }> = ({ tas
 
   const draggingStyles = 'opacity-50 transform rotate-3 scale-105 shadow-2xl';
   const baseStyles = `p-4 mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-md border-l-4 cursor-pointer hover:shadow-xl transition-all duration-300 ease-in-out`;
-  const borderColor = task.column === 'done' ? 'border-green-500' : 'border-primary';
+  const borderColor = 
+    task.column === 'done' ? 'border-green-500' :
+    task.column === 'blocked' ? 'border-red-500' : 
+    'border-primary';
 
   return (
     <div
@@ -46,8 +50,13 @@ const TaskCard: React.FC<{ task: Task; onClick: (task: Task) => void }> = ({ tas
     >
       <h4 className="font-bold text-gray-800 dark:text-gray-100">{task.title}</h4>
       <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-normal break-words">{task.description}</p>
-      <div className="mt-3 text-right text-xs font-semibold bg-primary text-white rounded-full px-2 py-1 inline-block">
-        {task.points} Points
+      <div className="flex justify-between items-center mt-3">
+        {task.attachments && task.attachments.length > 0 && (
+          <span className="text-xs text-medium dark:text-gray-400">📎 {task.attachments.length}</span>
+        )}
+        <div className="text-xs font-semibold bg-primary text-white rounded-full px-2 py-1 inline-block ml-auto">
+          {task.points} Points
+        </div>
       </div>
     </div>
   );
@@ -199,6 +208,8 @@ const TaskDetailModal: React.FC<{
     const [description, setDescription] = useState(task.description);
     const [points, setPoints] = useState<number | ''>(task.points);
     const [column, setColumn] = useState<ColumnId>(task.column);
+    const [attachments, setAttachments] = useState<Attachment[]>(task.attachments || []);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
     const handleSubmit = () => {
         if (!title.trim() || points === '' || Number(points) <= 0) {
@@ -211,6 +222,7 @@ const TaskDetailModal: React.FC<{
             description,
             points: Number(points),
             column,
+            attachments,
         });
     };
 
@@ -220,9 +232,47 @@ const TaskDetailModal: React.FC<{
         }
     };
     
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files) return;
+
+        // Fix: Explicitly type `file` as `File` to resolve a potential type inference issue where `file` was being treated as `unknown`.
+        Array.from(files).forEach((file: File) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = e.target?.result as string;
+                if (data) {
+                    setAttachments(prev => [...prev, { name: file.name, type: file.type, data }]);
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleRemoveAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleAnalyzeAttachments = async () => {
+        if (attachments.length === 0) {
+            alert("Please attach at least one file to analyze.");
+            return;
+        }
+        setIsAnalyzing(true);
+        try {
+            const summary = await analyzeTaskAttachments(title, attachments);
+            setDescription(prev => `${prev}\n\n--- AI Analysis ---\n${summary}`);
+        } catch (error) {
+            console.error("Failed to analyze attachments:", error);
+            alert("Error analyzing attachments. Check console for details.");
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-2xl text-gray-800 dark:text-gray-100" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-2xl text-gray-800 dark:text-gray-100 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <h2 className="text-2xl font-bold mb-6">Edit Task Details</h2>
                 <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
                     <div>
@@ -232,6 +282,36 @@ const TaskDetailModal: React.FC<{
                     <div>
                         <label htmlFor="edit-description" className="font-semibold block mb-2">Description</label>
                         <textarea id="edit-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={5} className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                    </div>
+                    {/* Attachments Section */}
+                    <div>
+                        <label className="font-semibold block mb-2">Attachments</label>
+                        <div className="p-4 border-2 border-dashed rounded-lg bg-gray-50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600">
+                           {attachments.length > 0 && (
+                               <ul className="space-y-2 mb-4">
+                                   {attachments.map((file, index) => (
+                                       <li key={index} className="flex justify-between items-center bg-gray-100 dark:bg-gray-600 p-2 rounded">
+                                           <span className="text-sm truncate">{file.name}</span>
+                                           <button type="button" onClick={() => handleRemoveAttachment(index)} className="text-red-500 hover:text-red-700 font-bold ml-4">X</button>
+                                       </li>
+                                   ))}
+                               </ul>
+                           )}
+                           <input type="file" id="file-upload" multiple onChange={handleFileChange} className="hidden" />
+                           <label htmlFor="file-upload" className="w-full text-center cursor-pointer bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover block">
+                               Upload Files
+                           </label>
+                        </div>
+                        {attachments.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleAnalyzeAttachments}
+                                disabled={isAnalyzing}
+                                className="w-full mt-4 px-4 py-2 bg-secondary text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                                {isAnalyzing ? 'Analyzing...' : '✨ Analyze Attachments'}
+                            </button>
+                        )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -267,6 +347,68 @@ const TaskDetailModal: React.FC<{
     );
 };
 
+const SprintEditModal: React.FC<{
+    sprint: Sprint;
+    onClose: () => void;
+    onSave: (updatedSprint: Sprint) => void;
+}> = ({ sprint, onClose, onSave }) => {
+    const [name, setName] = useState(sprint.name);
+    const [goal, setGoal] = useState(sprint.goal);
+    const formatDateForInput = (date: Date) => date.toISOString().split('T')[0];
+    const [startDate, setStartDate] = useState(formatDateForInput(sprint.startDate));
+    const [endDate, setEndDate] = useState(formatDateForInput(sprint.endDate));
+
+    const handleSubmit = () => {
+        if (!name.trim() || !goal.trim() || !startDate || !endDate) {
+            alert('Please fill in all fields.');
+            return;
+        }
+        if (new Date(startDate) >= new Date(endDate)) {
+            alert('The start date must be before the end date.');
+            return;
+        }
+        onSave({
+            ...sprint,
+            name,
+            goal,
+            startDate: new Date(startDate + 'T00:00:00Z'),
+            endDate: new Date(endDate + 'T00:00:00Z'),
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-lg text-gray-800 dark:text-gray-100">
+                <h2 className="text-2xl font-bold mb-6">Edit Sprint Details</h2>
+                <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
+                    <div>
+                        <label htmlFor="sprint-name" className="font-semibold block mb-2">Sprint Name</label>
+                        <input id="sprint-name" type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                    </div>
+                    <div>
+                        <label htmlFor="sprint-goal" className="font-semibold block mb-2">Sprint Goal</label>
+                        <textarea id="sprint-goal" value={goal} onChange={(e) => setGoal(e.target.value)} required rows={3} className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                         <div>
+                            <label htmlFor="start-date" className="font-semibold block mb-2">Start Date</label>
+                            <input id="start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                        </div>
+                        <div>
+                             <label htmlFor="end-date" className="font-semibold block mb-2">End Date</label>
+                             <input id="end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
+                        </div>
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100">Cancel</button>
+                        <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:bg-primary-hover">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [sprint, setSprint] = useState<Sprint>(initialSprint);
@@ -276,6 +418,7 @@ const App: React.FC = () => {
   const [showRetroModal, setShowRetroModal] = useState(false);
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showSprintModal, setShowSprintModal] = useState(false);
 
   const moveTask = useCallback((taskId: string, targetColumn: ColumnId) => {
     setTasks(
@@ -292,6 +435,7 @@ const App: React.FC = () => {
     const newTask: Task = {
       id: `task-${Date.now()}`,
       column: 'backlog',
+      attachments: [],
       ...taskData
     };
     setTasks(
@@ -326,6 +470,11 @@ const App: React.FC = () => {
         setEditingTask(task);
     };
 
+    const handleUpdateSprint = useCallback((updatedSprint: Sprint) => {
+        setSprint(updatedSprint);
+        setShowSprintModal(false);
+    }, []);
+
   const handleGenerateStories = async () => {
         const featureIdea = prompt("Enter a high-level feature idea (e.g., 'User profile page'):");
         if (!featureIdea) return;
@@ -338,6 +487,7 @@ const App: React.FC = () => {
                 ...story,
                 id: `task-${Date.now()}-${index}`,
                 column: 'backlog' as ColumnId,
+                attachments: [],
             }))]);
         } catch (error) {
             console.error("Failed to generate user stories:", error);
@@ -401,7 +551,15 @@ const App: React.FC = () => {
         
         <main className="p-8">
           <div className="bg-white dark:bg-gray-900 p-6 rounded-lg shadow-lg mb-8">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{sprint.name}</h2>
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{sprint.name}</h2>
+                <button 
+                    onClick={() => setShowSprintModal(true)}
+                    className="text-sm px-3 py-1 border border-primary text-primary rounded-md hover:bg-primary hover:text-white transition-colors"
+                >
+                    Edit
+                </button>
+            </div>
             <p className="text-medium mt-1">{sprint.goal}</p>
             <div className="text-sm text-medium mt-2">
               <span>{sprint.startDate.toLocaleDateString()}</span> - <span>{sprint.endDate.toLocaleDateString()}</span>
@@ -482,6 +640,14 @@ const App: React.FC = () => {
                 onClose={() => setEditingTask(null)}
                 onSave={handleUpdateTask}
                 onDelete={handleDeleteTask}
+            />
+        )}
+
+        {showSprintModal && (
+            <SprintEditModal
+                sprint={sprint}
+                onClose={() => setShowSprintModal(false)}
+                onSave={handleUpdateSprint}
             />
         )}
       </div>

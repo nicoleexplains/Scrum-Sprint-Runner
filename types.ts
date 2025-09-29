@@ -1,5 +1,10 @@
+export type ColumnId = 'backlog' | 'todo' | 'in-progress' | 'blocked' | 'done';
 
-export type ColumnId = 'backlog' | 'todo' | 'in-progress' | 'done';
+export interface Attachment {
+  name: string;
+  type: string;
+  data: string; // base64 encoded file content
+}
 
 export interface Task {
   id: string;
@@ -7,11 +12,12 @@ export interface Task {
   title: string;
   description: string;
   points: number;
+  attachments?: Attachment[];
 }
 
 export interface Sprint {
     id: string;
-    name: string;
+    name:string;
     startDate: Date;
     endDate: Date;
     goal: string;
